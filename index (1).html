@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM-COVID-19 · Fake News Detection</title>
+<meta name="description" content="A Large Language Model (LLM) approach to COVID-19 fake news detection — transformers, LLMs and six fusion methods.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --surface: #ffffff;
+    --surface-2: #f0f2f7;
+    --text: #0f172a;
+    --muted: #5b6475;
+    --border: #e3e7ef;
+    --accent: #4f46e5;
+    --accent-2: #0ea5e9;
+    --real: #10b981;
+    --fake: #f43f5e;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f19; --surface: #121826; --surface-2: #1a2233; --text: #e6e9f2;
+      --muted: #94a0b8; --border: #232c3f; --accent: #818cf8; --accent-2: #38bdf8;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f19; --surface: #121826; --surface-2: #1a2233; --text: #e6e9f2;
+    --muted: #94a0b8; --border: #232c3f; --accent: #818cf8; --accent-2: #38bdf8;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.65;
+    -webkit-font-smoothing: antialiased; transition: background .3s, color .3s;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { font-family: "JetBrains Mono", monospace; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* Nav */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
+  .brand-dot { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #fff; font-size: 14px; }
+  .nav-links { display: flex; gap: 22px; align-items: center; }
+  .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; }
+  .nav-links a:hover { color: var(--text); text-decoration: none; }
+  .icon-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); width: 36px; height: 36px; border-radius: 10px; cursor: pointer; display: grid; place-items: center; font-size: 16px; }
+  .icon-btn:hover { border-color: var(--accent); }
+
+  /* Hero */
+  header.hero { padding: 88px 0 64px; position: relative; overflow: hidden; }
+  header.hero::before {
+    content: ""; position: absolute; inset: -40% -10% auto; height: 520px; z-index: -1;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent),
+                radial-gradient(closest-side at 70% 40%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent);
+  }
+  .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--muted); font-weight: 500; }
+  .badge .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--real); box-shadow: 0 0 0 0 var(--real); animation: pulse 2s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  h1 { font-size: clamp(32px, 5.2vw, 56px); line-height: 1.1; letter-spacing: -0.03em; font-weight: 800; margin: 20px 0 18px; max-width: 900px; }
+  h1 .grad { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 720px; }
+  .authors { margin-top: 18px; font-size: 14px; color: var(--muted); }
+  .authors strong { color: var(--text); font-weight: 600; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 12px; font-weight: 600; font-size: 15px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: transform .15s, border-color .15s; }
+  .btn:hover { transform: translateY(-1px); border-color: var(--accent); text-decoration: none; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 56px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); }
+  .stat .num { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat .lbl { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* Sections */
+  section { padding: 72px 0; border-top: 1px solid var(--border); }
+  .eyebrow { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: var(--accent); }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -0.02em; margin: 8px 0 14px; font-weight: 750; }
+  .sub { color: var(--muted); max-width: 680px; margin-bottom: 36px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; box-shadow: var(--shadow); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  h3 { font-size: 18px; margin-bottom: 10px; font-weight: 650; }
+  ul.clean { list-style: none; }
+  ul.clean li { padding: 8px 0 8px 26px; position: relative; color: var(--muted); }
+  ul.clean li::before { content: "✓"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+
+  /* Pipeline */
+  .pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; counter-reset: step; }
+  .step { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 16px; text-align: center; box-shadow: var(--shadow); }
+  .step::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 30px; height: 30px; margin: 0 auto 10px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-weight: 700; font-size: 14px; }
+  .step b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .step span { font-size: 13px; color: var(--muted); }
+
+  /* Dataset bars */
+  .bar { height: 14px; border-radius: 999px; background: var(--surface-2); overflow: hidden; display: flex; margin: 10px 0 8px; }
+  .bar > div { height: 100%; width: 0; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+  .legend { display: flex; gap: 18px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+
+  /* Models */
+  .tabs { display: inline-flex; background: var(--surface-2); border-radius: 12px; padding: 4px; margin-bottom: 22px; }
+  .tab { border: 0; background: transparent; color: var(--muted); padding: 9px 16px; border-radius: 9px; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  .chip { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); transition: transform .2s, border-color .2s; }
+  .chip:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .chip .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+  .chip .v { font-weight: 700; font-size: 16px; margin-top: 4px; }
+  .chip.best { border-color: var(--accent); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface)); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: #fff; margin-left: 6px; vertical-align: middle; }
+
+  /* Results */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .ring { position: relative; width: 120px; height: 120px; margin: 0 auto 10px; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .val { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 800; font-size: 22px; }
+  .metric { text-align: center; }
+  .metric .name { color: var(--muted); font-size: 14px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 15px; }
+  th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+  td.num { font-family: "JetBrains Mono", monospace; }
+  .note { font-size: 14px; color: var(--muted); margin-top: 16px; }
+
+  /* Files */
+  .files { list-style: none; }
+  .file { display: flex; align-items: center; gap: 14px; padding: 14px 6px; border-bottom: 1px solid var(--border); }
+  .file:last-child { border-bottom: 0; }
+  .file .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2); font-size: 17px; flex-shrink: 0; }
+  .file .meta { flex: 1; min-width: 0; }
+  .file .meta a { font-weight: 600; color: var(--text); word-break: break-all; }
+  .file .meta small { display: block; color: var(--muted); font-size: 12px; }
+  .file-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 12px; flex-wrap: wrap; }
+  .status { font-size: 12px; color: var(--muted); }
+
+  /* Citation */
+  pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; overflow-x: auto; font-size: 13px; line-height: 1.6; color: var(--text); }
+  .copy-wrap { position: relative; }
+  .copy-btn { position: absolute; top: 12px; right: 12px; font-size: 12px; padding: 6px 12px; }
+
+  footer { padding: 40px 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s, transform .7s; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 860px) {
+    .stats, .metrics { grid-template-columns: repeat(2, 1fr); }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .pipeline { grid-template-columns: 1fr 1fr; }
+    .nav-links a { display: none; }
+  }
+  @media (max-width: 480px) {
+    .wrap { padding: 0 16px; }
+    .pipeline { grid-template-columns: 1fr; }
+    th, td { padding: 10px 8px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a href="#" class="brand"><span class="brand-dot">◆</span> LLM-COVID-19</a>
+    <div class="nav-links">
+      <a href="#overview">Overview</a>
+      <a href="#dataset">Dataset</a>
+      <a href="#models">Models</a>
+      <a href="#results">Results</a>
+      <a href="#files">Code &amp; Analysis</a>
+      <a href="#cite">Cite</a>
+      <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">◐</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge"><span class="pulse"></span> Research code · Yale School of Medicine</span>
+    <h1>A Large Language Model Approach to <span class="grad">COVID-19 Fake News Detection</span></h1>
+    <p class="lede">Classifying COVID-19 tweets as <strong>real</strong> or <strong>fake</strong> by comparing fine-tuned transformers with large language models, and boosting predictions with six fusion and optimization methods.</p>
+    <p class="authors"><strong>Muhammad Arif</strong>, Samah Fodeh-Jarad, Elyas Irankhah, Uroosa Fatima, Lama Ayash, Sreeraj Ramachandran</p>
+    <div class="cta">
+      <a class="btn primary" id="paperLink" href="#" target="_blank" rel="noopener">📄 Read the paper</a>
+      <a class="btn" href="https://github.com/marif561/LLM-COVID-19" target="_blank" rel="noopener">★ View on GitHub</a>
+      <a class="btn" href="#cite">❝ Cite</a>
+    </div>
+
+    <div class="stats reveal">
+      <div class="stat"><div class="num" data-count="6420">0</div><div class="lbl">Labelled tweets</div></div>
+      <div class="stat"><div class="num" data-count="7">0</div><div class="lbl">Models compared</div></div>
+      <div class="stat"><div class="num" data-count="6">0</div><div class="lbl">Fusion methods</div></div>
+      <div class="stat"><div class="num" data-count="96.31" data-dec="2" data-suffix="%">0</div><div class="lbl">Best accuracy (GPT-2)</div></div>
+    </div>
+  </div>
+</header>
+
+<section id="overview">
+  <div class="wrap">
+    <div class="eyebrow">Overview</div>
+    <h2>From raw tweets to a verdict</h2>
+    <p class="sub">Misinformation spread fast during the pandemic. This study benchmarks transfer-learning transformers against LLMs on a public tweet dataset, then combines model outputs through fusion and numerical optimization.</p>
+    <div class="pipeline reveal">
+      <div class="step"><b>Collect</b><span>COVID-19 English tweets</span></div>
+      <div class="step"><b>Clean</b><span>Strip URLs, tags, numbers; lowercase</span></div>
+      <div class="step"><b>Fine-tune</b><span>4 transformers + 3 LLMs</span></div>
+      <div class="step"><b>Fuse</b><span>6 fusion / optimization methods</span></div>
+      <div class="step"><b>Evaluate</b><span>Acc · P · R · F1 · confusion</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="dataset">
+  <div class="wrap">
+    <div class="eyebrow">Dataset</div>
+    <h2>COVID-19 English Tweets</h2>
+    <p class="sub">A public dataset with two columns, <code>Tweets</code> (text) and <code>Labels</code> (real / fake). Classes are close to balanced, so no resampling was needed.</p>
+    <div class="grid-2 reveal">
+      <div class="card">
+        <h3>Class distribution</h3>
+        <div class="bar"><div data-w="52.34" style="background:var(--real)"></div><div data-w="47.66" style="background:var(--fake)"></div></div>
+        <div class="legend"><span><i style="background:var(--real)"></i>Real · 3,360</span><span><i style="background:var(--fake)"></i>Fake · 3,060</span></div>
+        <h3 style="margin-top:26px">Data split</h3>
+        <div class="bar"><div data-w="70" style="background:var(--accent)"></div><div data-w="10" style="background:var(--accent-2)"></div><div data-w="20" style="background:#a78bfa"></div></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>Train 70%</span><span><i style="background:var(--accent-2)"></i>Validation 10%</span><span><i style="background:#a78bfa"></i>Test 20%</span></div>
+      </div>
+      <div class="card">
+        <h3>Preprocessing</h3>
+        <ul class="clean">
+          <li>Removed URLs and special tags</li>
+          <li>Removed numbers</li>
+          <li>Normalised whitespace</li>
+          <li>Lowercased all text</li>
+          <li>Stratification unnecessary — classes near-balanced</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="models">
+  <div class="wrap">
+    <div class="eyebrow">Models</div>
+    <h2>What we compared</h2>
+    <p class="sub">Seven pretrained models across two families, plus six ways to combine their predictions.</p>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="tf">Transformers</button>
+      <button class="tab" data-tab="llm">LLMs</button>
+      <button class="tab" data-tab="fusion">Fusion methods</button>
+    </div>
+    <div id="tabBody" class="grid-3"></div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <div class="eyebrow">Results</div>
+    <h2>GPT-2 leads on the test set</h2>
+    <p class="sub">GPT-2 was the best single model, reaching about 0.96 across every metric.</p>
+    <div class="card reveal">
+      <div class="metrics">
+        <div class="metric" data-v="0.9631"><div class="ring"></div><div class="name">Accuracy</div></div>
+        <div class="metric" data-v="0.9612"><div class="ring"></div><div class="name">Precision</div></div>
+        <div class="metric" data-v="0.9610"><div class="ring"></div><div class="name">Recall</div></div>
+        <div class="metric" data-v="0.9600"><div class="ring"></div><div class="name">F1-score</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead>
+        <tbody><tr><td><strong>GPT-2</strong> <span class="tag">BEST</span></td><td class="num">0.9631</td><td class="num">0.9612</td><td class="num">0.9610</td><td class="num">0.9600</td></tr></tbody>
+      </table>
+      <p class="note">Full results for every model and fusion method (Tables II–V) and confusion-matrix heatmaps are in the paper.</p>
+    </div>
+  </div>
+</section>
+
+<section id="files">
+  <div class="wrap">
+    <div class="eyebrow">Code &amp; Analysis</div>
+    <h2>Repository contents</h2>
+    <p class="sub">This list loads live from GitHub, so scripts, notebooks and analysis files appear here automatically as soon as they're pushed.</p>
+    <div class="card">
+      <div class="file-head"><h3 style="margin:0">Files</h3><span class="status" id="fileStatus">Loading…</span></div>
+      <ul class="files" id="fileList"></ul>
+    </div>
+  </div>
+</section>
+
+<section id="cite">
+  <div class="wrap">
+    <div class="eyebrow">Citation</div>
+    <h2>Cite this work</h2>
+    <p class="sub">If this code or analysis helps your research, please cite:</p>
+    <div class="copy-wrap">
+      <button class="btn copy-btn" id="copyBtn">Copy</button>
+<pre id="bibtex">@misc{arif2026llmcovid,
+  title  = {A Large Language Model (LLM) Approach to COVID-19 Fake News Detection},
+  author = {Arif, Muhammad and Fodeh-Jarad, Samah and Irankhah, Elyas and
+            Fatima, Uroosa and Ayash, Lama and Ramachandran, Sreeraj},
+  note   = {Yale School of Medicine}
+}</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© <span id="year"></span> Muhammad Arif et al.</span>
+    <a href="https://github.com/marif561/LLM-COVID-19" target="_blank" rel="noopener">github.com/marif561/LLM-COVID-19</a>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const OWNER = "marif561", REPO = "LLM-COVID-19", BRANCH = "main";
+  const PAPER = "A Large Language Model LLM Approach to COVID-19 Fake News Detection.pdf";
+  const blob = p => `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${encodeURIComponent(p).replace(/%2F/g, "/")}`;
+
+  document.getElementById("year").textContent = new Date().getFullYear();
+  document.getElementById("paperLink").href = blob(PAPER);
+
+  /* Theme toggle */
+  const root = document.documentElement;
+  const getStored = () => { try { return localStorage.getItem("theme"); } catch { return null; } };
+  const stored = getStored();
+  if (stored) root.dataset.theme = stored;
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    const isDark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = isDark ? "light" : "dark";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch {}
+  });
+
+  /* Count-up stats */
+  const countUp = el => {
+    const end = parseFloat(el.dataset.count), dec = +(el.dataset.dec || 0), suf = el.dataset.suffix || "";
+    const t0 = performance.now(), dur = 1400;
+    const tick = t => {
+      const p = Math.min((t - t0) / dur, 1), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = (end * e).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf;
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
+  /* Metric rings */
+  const ring = m => {
+    const v = parseFloat(m.dataset.v), r = 52, c = 2 * Math.PI * r;
+    m.querySelector(".ring").innerHTML = `
+      <svg width="120" height="120"><circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--surface-2)" stroke-width="10"/>
+      <circle cx="60" cy="60" r="${r}" fill="none" stroke="url(#g)" stroke-width="10" stroke-linecap="round"
+        stroke-dasharray="${c}" stroke-dashoffset="${c}" style="transition:stroke-dashoffset 1.4s cubic-bezier(.2,.8,.2,1)"/>
+      <defs><linearGradient id="g"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient></defs></svg>
+      <div class="val">${(v * 100).toFixed(2)}%</div>`;
+    requestAnimationFrame(() => setTimeout(() => m.querySelector("circle:nth-of-type(2)").style.strokeDashoffset = c * (1 - v), 50));
+  };
+
+  /* Scroll reveal */
+  const io = new IntersectionObserver(entries => entries.forEach(en => {
+    if (!en.isIntersecting) return;
+    const el = en.target;
+    el.classList.add("in");
+    el.querySelectorAll("[data-count]").forEach(countUp);
+    el.querySelectorAll(".bar > div").forEach(b => b.style.width = b.dataset.w + "%");
+    el.querySelectorAll(".metric").forEach(ring);
+    io.unobserve(el);
+  }), { threshold: 0.2 });
+  document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+  /* Model tabs */
+  const data = {
+    tf: [["Transformer","BERT-base"],["Transformer","ALBERT-base"],["Transformer","XLM-RoBERTa-base"],["Transformer","DistilBERT"]],
+    llm: [["LLM","GPT-2",true],["LLM","XLNet"],["LLM","T5"]],
+    fusion: [["Ensemble","Weighted fusion"],["Swarm","PSO fusion"],["Simplex","Nelder–Mead"],["Direction set","Powell's method"],["Quasi-Newton","BFGS"],["Constrained","Trust-region"]]
+  };
+  const body = document.getElementById("tabBody");
+  const render = key => {
+    body.innerHTML = data[key].map(([k, v, best]) =>
+      `<div class="chip${best ? " best" : ""}"><div class="k">${k}</div><div class="v">${v}${best ? '<span class="tag">BEST</span>' : ""}</div></div>`).join("");
+  };
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === t));
+    render(t.dataset.tab);
+  }));
+  render("tf");
+
+  /* Copy citation */
+  document.getElementById("copyBtn").addEventListener("click", async e => {
+    try { await navigator.clipboard.writeText(document.getElementById("bibtex").textContent); e.target.textContent = "Copied ✓"; }
+    catch { e.target.textContent = "Select & copy"; }
+    setTimeout(() => e.target.textContent = "Copy", 1800);
+  });
+
+  /* Live repo file list */
+  const icons = { py:"🐍", ipynb:"📓", pdf:"📄", md:"📝", csv:"📊", json:"🧾", txt:"📃", png:"🖼️", jpg:"🖼️", html:"🌐", r:"📈", sh:"⚙️" };
+  const fmtSize = b => b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : b > 1024 ? (b / 1024).toFixed(1) + " KB" : b + " B";
+  const fallback = [
+    { name: PAPER, path: PAPER, type: "file", size: 1039246 },
+    { name: "LLM-COVID-19_README.md", path: "LLM-COVID-19_README.md", type: "file", size: 1837 },
+    { name: "README.md", path: "README.md", type: "file", size: 247 }
+  ];
+  const list = document.getElementById("fileList"), status = document.getElementById("fileStatus");
+  const show = (items, live) => {
+    items.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1));
+    list.innerHTML = items.map(f => {
+      const ext = f.name.split(".").pop().toLowerCase();
+      const ico = f.type === "dir" ? "📁" : icons[ext] || "📄";
+      const url = f.html_url || blob(f.path);
+      const meta = f.type === "dir" ? "Folder" : `${ext.toUpperCase()} · ${fmtSize(f.size)}`;
+      return `<li class="file"><span class="ico">${ico}</span><div class="meta"><a href="${url}" target="_blank" rel="noopener">${f.name}</a><small>${meta}</small></div></li>`;
+    }).join("");
+    status.textContent = live ? `${items.length} items · live from GitHub` : `${items.length} items · offline snapshot`;
+  };
+  fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents`)
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(items => show(items, true))
+    .catch(() => show(fallback, false));
+})();
+</script>
+</body>
+</html>
